@@ -122,50 +122,84 @@ func (r *Renderer) getTileImage(tile *tiled.LayerTile) (image.Image, error) {
 	return r.engine.RotateTileImage(tile, timg), nil
 }
 
-// RenderLayer renders single map layer.
-func (r *Renderer) RenderLayer(index int) error {
+func (r *Renderer) renderTile(layer *tiled.Layer, tile *tiled.LayerTile, x int, y int) error {
+	if tile.IsNil() {
+		return nil
+	}
+
+	img, err := r.getTileImage(tile)
+	if err != nil {
+		return err
+	}
+
+	pos := r.engine.GetTilePosition(x, y)
+
+	if layer.Opacity < 1 {
+		mask := image.NewUniform(color.Alpha{uint8(layer.Opacity * 255)})
+
+		draw.DrawMask(r.Result, pos, img, img.Bounds().Min, mask, mask.Bounds().Min, draw.Over)
+	} else {
+		draw.Draw(r.Result, pos, img, img.Bounds().Min, draw.Over)
+	}
+
+	return nil
+}
+
+func (r *Renderer) RenderLayerTiles(index int, tilepositions map[image.Point]bool) {
+	layer := r.m.Layers[index]
+	for point := range tilepositions {
+		i := point.X + point.Y*r.m.Width
+		tile := layer.Tiles[i]
+		r.renderTile(layer, tile, point.X, point.Y)
+	}
+}
+
+func (r *Renderer) RenderLayerRect(index, x, y, width, height int) error {
 	layer := r.m.Layers[index]
 
 	var xs, xe, xi, ys, ye, yi int
 	if r.m.RenderOrder == "" || r.m.RenderOrder == "right-down" {
-		xs = 0
-		xe = r.m.Width
+		xs = x
+		xe = x + width
 		xi = 1
-		ys = 0
-		ye = r.m.Height
+		ys = y
+		ye = y + height
 		yi = 1
 	} else {
 		return ErrUnsupportedRenderOrder
 	}
 
-	i := 0
-	for y := ys; y*yi < ye; y = y + yi {
-		for x := xs; x*xi < xe; x = x + xi {
-			if layer.Tiles[i].IsNil() {
-				i++
-				continue
-			}
+	if xs < 0 {
+		xs = 0
+	}
+	if xe > r.m.Width {
+		xe = r.m.Width
+	}
+	if ys < 0 {
+		ys = 0
+	}
+	if ye > r.m.Height {
+		ye = r.m.Height
+	}
 
-			img, err := r.getTileImage(layer.Tiles[i])
+	var err error
+	for y := ys; y*yi < ye; y = y + yi {
+		i := xs + y*r.m.Width
+		for x := xs; x*xi < xe; x = x + xi {
+			err = r.renderTile(layer, layer.Tiles[i], x, y)
 			if err != nil {
 				return err
 			}
-
-			pos := r.engine.GetTilePosition(x, y)
-
-			if layer.Opacity < 1 {
-				mask := image.NewUniform(color.Alpha{uint8(layer.Opacity * 255)})
-
-				draw.DrawMask(r.Result, pos, img, img.Bounds().Min, mask, mask.Bounds().Min, draw.Over)
-			} else {
-				draw.Draw(r.Result, pos, img, img.Bounds().Min, draw.Over)
-			}
-
 			i++
 		}
 	}
 
 	return nil
+}
+
+// RenderLayer renders single map layer.
+func (r *Renderer) RenderLayer(index int) error {
+	return r.RenderLayerRect(index, 0, 0, r.m.Width, r.m.Height)
 }
 
 // RenderVisibleLayers renders all visible map layers.
