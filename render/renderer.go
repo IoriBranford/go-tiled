@@ -58,29 +58,29 @@ type RendererEngine interface {
 type Renderer struct {
 	m         *tiled.Map
 	Result    *image.NRGBA // The image result after rendering using the Render functions.
-	tileCache map[uint32]image.Image
-	engine    RendererEngine
+	TileCache map[uint32]image.Image
+	Engine    RendererEngine
 }
 
 // NewRenderer creates new rendering engine instance.
 func NewRenderer(m *tiled.Map) (*Renderer, error) {
-	r := &Renderer{m: m, tileCache: make(map[uint32]image.Image)}
+	r := &Renderer{m: m, TileCache: make(map[uint32]image.Image)}
 	if r.m.Orientation == "orthogonal" {
-		r.engine = &OrthogonalRendererEngine{}
+		r.Engine = &OrthogonalRendererEngine{}
 	} else {
 		return nil, ErrUnsupportedOrientation
 	}
 
-	r.engine.Init(r.m)
+	r.Engine.Init(r.m)
 	r.Clear()
 
 	return r, nil
 }
 
 func (r *Renderer) getTileImage(tile *tiled.LayerTile) (image.Image, error) {
-	timg, ok := r.tileCache[tile.Tileset.FirstGID+tile.ID]
+	timg, ok := r.TileCache[tile.Tileset.FirstGID+tile.ID]
 	if ok {
-		return r.engine.RotateTileImage(tile, timg), nil
+		return r.Engine.RotateTileImage(tile, timg), nil
 	}
 	// Precache all tiles in tileset
 	if tile.Tileset.Image == nil {
@@ -95,7 +95,7 @@ func (r *Renderer) getTileImage(tile *tiled.LayerTile) (image.Image, error) {
 				if err != nil {
 					return nil, err
 				}
-				r.tileCache[tile.Tileset.FirstGID+tile.ID] = timg
+				r.TileCache[tile.Tileset.FirstGID+tile.ID] = timg
 			}
 		}
 	} else {
@@ -112,14 +112,14 @@ func (r *Renderer) getTileImage(tile *tiled.LayerTile) (image.Image, error) {
 
 		for i := uint32(0); i < uint32(tile.Tileset.TileCount); i++ {
 			rect := tile.Tileset.GetTileRect(i)
-			r.tileCache[i+tile.Tileset.FirstGID] = imaging.Crop(img, rect)
+			r.TileCache[i+tile.Tileset.FirstGID] = imaging.Crop(img, rect)
 			if tile.ID == i {
-				timg = r.tileCache[i+tile.Tileset.FirstGID]
+				timg = r.TileCache[i+tile.Tileset.FirstGID]
 			}
 		}
 	}
 
-	return r.engine.RotateTileImage(tile, timg), nil
+	return r.Engine.RotateTileImage(tile, timg), nil
 }
 
 func (r *Renderer) renderTile(layer *tiled.Layer, tile *tiled.LayerTile, x int, y int) error {
@@ -132,7 +132,7 @@ func (r *Renderer) renderTile(layer *tiled.Layer, tile *tiled.LayerTile, x int, 
 		return err
 	}
 
-	pos := r.engine.GetTilePosition(x, y)
+	pos := r.Engine.GetTilePosition(x, y)
 
 	if layer.Opacity < 1 {
 		mask := image.NewUniform(color.Alpha{uint8(layer.Opacity * 255)})
@@ -221,7 +221,7 @@ func (r *Renderer) RenderVisibleLayers() error {
 // render a layer, make a copy of the render, clear the renderer, and repeat for each
 // layer in the Map.
 func (r *Renderer) Clear() {
-	r.Result = image.NewNRGBA(r.engine.GetFinalImageSize())
+	r.Result = image.NewNRGBA(r.Engine.GetFinalImageSize())
 }
 
 // SaveAsPng writes rendered layers as PNG image to provided writer.
